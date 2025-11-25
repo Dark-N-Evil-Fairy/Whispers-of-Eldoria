@@ -1,0 +1,75 @@
+import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  X, BookOpen, MapPin, Users, Scroll, Skull, 
+  Crown, Shield, Search, ChevronRight, Sparkles,
+  Lock
+} from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import ReactMarkdown from 'react-markdown';
+
+const categoryConfig = {
+  location: { icon: MapPin, color: 'text-emerald-400', bg: 'bg-emerald-500/20', border: 'border-emerald-500/30' },
+  character: { icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/20', border: 'border-blue-500/30' },
+  history: { icon: Scroll, color: 'text-amber-400', bg: 'bg-amber-500/20', border: 'border-amber-500/30' },
+  creature: { icon: Skull, color: 'text-red-400', bg: 'bg-red-500/20', border: 'border-red-500/30' },
+  artifact: { icon: Crown, color: 'text-purple-400', bg: 'bg-purple-500/20', border: 'border-purple-500/30' },
+  faction: { icon: Shield, color: 'text-cyan-400', bg: 'bg-cyan-500/20', border: 'border-cyan-500/30' }
+};
+
+export default function LoreJournal({ isOpen, onClose, discoveredLore = [], allLore = [] }) {
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedEntry, setSelectedEntry] = useState(null);
+
+  const discoveredEntries = useMemo(() => {
+    return allLore.filter(l => discoveredLore.includes(l.title));
+  }, [discoveredLore, allLore]);
+
+  const filteredEntries = useMemo(() => {
+    return discoveredEntries.filter(entry => {
+      const matchesCategory = selectedCategory === 'all' || entry.category === selectedCategory;
+      const matchesSearch = !searchQuery || 
+        entry.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        entry.short_description.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+  }, [discoveredEntries, selectedCategory, searchQuery]);
+
+  const undiscoveredCount = allLore.length - discoveredEntries.length;
+
+  const categories = [
+    { id: 'all', label: 'All' },
+    { id: 'location', label: 'Locations' },
+    { id: 'character', label: 'Characters' },
+    { id: 'history', label: 'History' },
+    { id: 'creature', label: 'Creatures' },
+    { id: 'artifact', label: 'Artifacts' },
+    { id: 'faction', label: 'Factions' }
+  ];
+
+  const handleRelatedClick = (title) => {
+    const entry = allLore.find(l => l.title === title);
+    if (entry && discoveredLore.includes(title)) {
+      setSelectedEntry(entry);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40"
+          />
+          
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+ 

@@ -1,0 +1,75 @@
+import { Button } from "@/components/ui/button";
+import { Package, Save, LogOut, Menu, BookOpen, ScrollText, Users } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+
+export default function GameHeader({ onOpenInventory, onOpenLoreJournal, onOpenQuestPanel, onOpenCompanions, onSave, onNewGame, isSaving, discoveredLoreCount = 0, activeQuestCount = 0, activeCompanionCount = 0 }) {
+  return (
+    <header className="flex items-center justify-between py-4 px-1">
+      <div className="flex items-center gap-3">
+        <div className="text-3xl">⚔️</div>
+        <div>
+          <h1 className="text-xl font-bold text-amber-100">Realm of Shadows</h1>
+          <p className="text-xs text-slate-500">AI Text Adventure</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onOpenCompanions}
+          className="text-slate-400 hover:text-amber-200 hover:bg-slate-800/50 rounded-xl relative"
+        >
+          <Users className="w-5 h-5" />
+          {activeCompanionCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+              {activeCompanionCount}
+            </span>
+          )}
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onOpenQuestPanel}
+          className="text-slate-400 hover:text-amber-200 hover:bg-slate-800/50 rounded-xl relative"
+        >
+          <ScrollText className="w-5 h-5" />
+          {activeQuestCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-purple-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+              {activeQuestCount > 9 ? '9+' : activeQuestCount}
+            </span>
+          )}
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onOpenLoreJournal}
+          className="text-slate-400 hover:text-amber-200 hover:bg-slate-800/50 rounded-xl relative"
+        >
+          <BookOpen className="w-5 h-5" />
+          {discoveredLoreCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 rounded-full text-[10px] font-bold text-slate-900 flex items-center justify-center">
+              {discoveredLoreCount > 9 ? '9+' : discoveredLoreCount}
+            </span>
+          )}
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onOpenInventory}
+          className="text-slate-400 hover:text-amber-200 hover:bg-slate-800/50 rounded-xl"
+        >
+          <Package className="w-5 h-5" />
+        </Button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+ 

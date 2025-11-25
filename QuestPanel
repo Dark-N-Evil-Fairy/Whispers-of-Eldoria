@@ -1,0 +1,62 @@
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  X, ScrollText, ChevronRight, CheckCircle2, Circle, 
+  Trophy, Coins, Star, Gift, MapPin, User, Clock
+} from 'lucide-react';
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+export default function QuestPanel({ isOpen, onClose, quests = [] }) {
+  const [selectedQuest, setSelectedQuest] = useState(null);
+  const [filter, setFilter] = useState('active');
+
+  const activeQuests = quests.filter(q => q.status === 'active');
+  const completedQuests = quests.filter(q => q.status === 'completed');
+  const failedQuests = quests.filter(q => q.status === 'failed');
+
+  const filteredQuests = filter === 'active' ? activeQuests : 
+                         filter === 'completed' ? completedQuests : 
+                         failedQuests;
+
+  const getQuestProgress = (quest) => {
+    if (!quest.objectives || quest.objectives.length === 0) return 0;
+    const completed = quest.objectives.filter(o => o.completed).length;
+    return (completed / quest.objectives.length) * 100;
+  };
+
+  const getStageObjectives = (quest, stage) => {
+    return quest.objectives?.filter(o => o.stage === stage) || [];
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40"
+          />
+          
+          <motion.div
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed left-0 top-0 h-full w-full max-w-lg bg-gradient-to-b from-slate-900 to-slate-950 border-r border-amber-900/30 z-50 flex flex-col"
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-amber-900/20">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center shadow-lg">
+                  <ScrollText className="w-5 h-5 text-amber-100" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-amber-100">Quest Journal</h2>
+                  <p className="text-sm text-slate-400">
+ 

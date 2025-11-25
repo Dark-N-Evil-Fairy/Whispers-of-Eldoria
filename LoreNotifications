@@ -1,0 +1,62 @@
+import { motion, AnimatePresence } from 'framer-motion';
+import { BookOpen, X } from 'lucide-react';
+import { Button } from "@/components/ui/button";
+
+export default function LoreNotification({ entries = [], onDismiss, onViewJournal }) {
+  if (entries.length === 0) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 50, scale: 0.9 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 50, scale: 0.9 }}
+        className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 max-w-md w-full mx-4"
+      >
+        <div className="bg-gradient-to-r from-amber-900/90 to-amber-800/90 backdrop-blur-sm border border-amber-600/30 rounded-2xl p-4 shadow-xl shadow-amber-900/30">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center flex-shrink-0">
+              <BookOpen className="w-5 h-5 text-amber-300" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="font-semibold text-amber-100">
+                New Lore Discovered!
+              </h4>
+              <p className="text-amber-200/70 text-sm mt-1">
+                {entries.length === 1 
+                  ? `You learned about "${entries[0]}"`
+                  : `You discovered ${entries.length} new entries`
+                }
+              </p>
+              <div className="flex gap-2 mt-3">
+                <Button
+                  size="sm"
+                  onClick={onViewJournal}
+                  className="bg-amber-600 hover:bg-amber-500 text-white"
+                >
+                  View Journal
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={onDismiss}
+                  className="text-amber-200 hover:text-amber-100 hover:bg-amber-700/30"
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onDismiss}
+              className="text-amber-400 hover:text-amber-200 hover:bg-amber-700/30 -mt-1 -mr-1"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}

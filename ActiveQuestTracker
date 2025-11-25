@@ -1,0 +1,62 @@
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ScrollText, ChevronDown, ChevronUp, CheckCircle2, Circle } from 'lucide-react';
+import { Progress } from "@/components/ui/progress";
+
+export default function ActiveQuestTracker({ quests = [], onOpenQuestPanel }) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  
+  const activeQuests = quests.filter(q => q.status === 'active').slice(0, 3);
+  
+  if (activeQuests.length === 0) return null;
+
+  const getQuestProgress = (quest) => {
+    if (!quest.objectives || quest.objectives.length === 0) return 0;
+    const completed = quest.objectives.filter(o => o.completed).length;
+    return (completed / quest.objectives.length) * 100;
+  };
+
+  const getCurrentObjectives = (quest) => {
+    return quest.objectives?.filter(o => o.stage === quest.stage && !o.completed).slice(0, 2) || [];
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-sm border border-amber-900/30 rounded-2xl overflow-hidden"
+    >
+      {/* Header */}
+      <button
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        className="w-full flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <ScrollText className="w-4 h-4 text-amber-400" />
+          <span className="text-sm font-medium text-amber-200">
+            Active Quests ({activeQuests.length})
+          </span>
+        </div>
+        {isCollapsed ? (
+          <ChevronDown className="w-4 h-4 text-slate-400" />
+        ) : (
+          <ChevronUp className="w-4 h-4 text-slate-400" />
+        )}
+      </button>
+
+      {/* Quest List */}
+      <AnimatePresence>
+        {!isCollapsed && (
+          <motion.div
+            initial={{ height: 0 }}
+            animate={{ height: 'auto' }}
+            exit={{ height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-4 space-y-3">
+              {activeQuests.map((quest) => {
+                const progress = getQuestProgress(quest);
+                const currentObjectives = getCurrentObjectives(quest);
+                
+                return (
+ 

@@ -1,0 +1,47 @@
+{
+  "name": "LoreEntry",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Title of the lore entry"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "location",
+        "character",
+        "history",
+        "creature",
+        "artifact",
+        "faction"
+      ],
+      "description": "Type of lore entry"
+    },
+    "content": {
+      "type": "string",
+      "description": "Full lore description"
+    },
+    "short_description": {
+      "type": "string",
+      "description": "Brief summary for quick reference"
+    },
+    "related_entries": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Titles of related lore entries"
+    },
+    "is_base_lore": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this is pre-defined world lore"
+    }
+  },
+  "required": [
+    "title",
+    "category",
+    "content"
+  ]
+}

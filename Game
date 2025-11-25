@@ -1,0 +1,949 @@
+import { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
+import CharacterCreation from '@/components/rpg/CharacterCreation';
+import CharacterStats from '@/components/rpg/CharacterStats';
+import StoryDisplay from '@/components/rpg/StoryDisplay';
+import ActionInput from '@/components/rpg/ActionInput';
+import InventoryPanel from '@/components/rpg/InventoryPanel';
+import GameHeader from '@/components/rpg/GameHeader';
+import LoreJournal from '@/components/rpg/lore/LoreJournal';
+import LoreNotification from '@/components/rpg/LoreNotification';
+import { BASE_LORE, getLoreContext, getUndiscoveredLore } from '@/components/rpg/lore/LoreData';
+import QuestPanel from '@/components/rpg/quests/QuestPanel';
+import QuestNotification from '@/components/rpg/quests/QuestNotification';
+import ActiveQuestTracker from '@/components/rpg/quests/ActiveQuestTracker';
+import CompanionPanel from '@/components/rpg/companions/CompanionPanel';
+import CompanionNotification from '@/components/rpg/companions/CompanionNotification';
+import ActiveCompanions from '@/components/rpg/companions/ActiveCompanions';
+import { COMPANION_TEMPLATES } from '@/components/rpg/companions/CompanionData';
+
+const GAME_MASTER_PROMPT = `You are a masterful dungeon master running a text-based RPG set in the Realm of Shadows. You create immersive, atmospheric narratives with rich descriptions. Keep responses concise (2-3 paragraphs max). Always:
+- Describe the scene vividly
+- Present 2-4 clear choices or opportunities
+- Track combat and stats changes
+- Be consistent with the fantasy world and its established lore
+- Include occasional rewards (gold, items, XP)
+- Make the player feel like a hero
+- Naturally weave in references to world lore, locations, characters, and history
+- When introducing new lore elements (places, people, events, creatures), mention them by their proper names
+- Generate multi-stage quests based on player actions, discovered lore, and current game state
+- Update quest progress when players complete objectives
+
+Current character: {characterName} the {characterClass}
+Location: {location}
+Health: {health}/{maxHealth}
+Gold: {gold}
+Level: {level}
+
+Inventory: {inventory}
+
+{loreContext}
+
+ACTIVE QUESTS:
+{activeQuests}
+
+AVAILABLE LORE TO INTRODUCE (mention these naturally when relevant):
+{undiscoveredLore}
+
+=== QUEST SYSTEM ===
+Generate quests that:
+1. Have 2-4 stages with clear objectives
+2. Connect to discovered lore and current storyline
+3. Offer meaningful rewards (gold, XP, unique items)
+4. Can be given by NPCs or discovered through exploration
+5. Progress naturally through player actions
+
+When a NEW QUEST is given or discovered, include:
+[QUEST_NEW: {"id":"unique_id","name":"Quest Name","description":"Brief description","giver":"NPC Name or null","stage":1,"total_stages":3,"objectives":[{"id":"obj1","description":"First objective","completed":false,"stage":1},{"id":"obj2","description":"Second objective","completed":false,"stage":1},{"id":"obj3","description":"Stage 2 objective","completed":false,"stage":2}],"rewards":{"gold":50,"xp":100,"items":[{"name":"Item Name","type":"weapon"}]},"log":["Quest started"],"status":"active","related_lore":["Related Lore Title"]}]
+
+When a quest OBJECTIVE is completed, include:
+[QUEST_PROGRESS: {"quest_id":"quest_id","objective_id":"obj_id","log_entry":"What happened"}]
+
+When advancing to next STAGE, include:
+[QUEST_STAGE: {"quest_id":"quest_id","new_stage":2,"log_entry":"Stage completed, new challenges await"}]
+
+When a quest is COMPLETED, include:
+[QUEST_COMPLETE: {"quest_id":"quest_id","log_entry":"Final completion message"}]
+
+When a quest FAILS, include:
+[QUEST_FAILED: {"quest_id":"quest_id","log_entry":"Why it failed"}]
+
+=== OTHER TAGS ===
+When the player discovers new lore:
+[LORE: Title1, Title2, etc]
+
+When stats change:
+[STATS: gold+X, health-Y, xp+Z, item+ItemName:type]
+
+=== COMPANION SYSTEM ===
+Available companions can be recruited through story interactions. Active companions:
+- Have unique personalities and should speak in character during appropriate moments
+- Can use their abilities in combat and exploration
+- React to story events based on their personality
+- Build loyalty through positive interactions
+
+{companionContext}
+
+When a COMPANION is recruited, include:
+[COMPANION_JOIN: {"id":"companion_id"}]
+
+When a companion SPEAKS (add dialogue naturally, 1-2 times per response max), include:
+[COMPANION_DIALOGUE: {"id":"companion_id","dialogue":"What they say","mood":"current mood"}]
+
+When companion health changes:
+[COMPANION_HEALTH: {"id":"companion_id","change":-10}]
+
+When a companion LEAVES (due to story or low loyalty), include:
+[COMPANION_LEAVE: {"id":"companion_id","reason":"Why they left"}]`;
+
+const OPENING_PROMPT = `Begin an epic adventure for {characterName} the {characterClass}. They start in the Village of Thornwick, a humble frontier village at the edge of the Whispering Woods. 
+
+Reference the village's history - it was founded by refugees after the Sundering War, protected by the witch Moira Thornheart's enchanted brambles. Mention the village elder Aldric Greymantle, a former adventurer who notices the player and approaches them with concern about strange happenings.
+
+Aldric should offer the player their first quest - investigating strange sounds and sightings at the edge of the Whispering Woods. Create a multi-stage quest with 3 stages:
+1. Stage 1: Speak to villagers about the disturbances, gather information
+2. Stage 2: Venture to the forest edge and investigate
+3. Stage 3: Deal with what you find and report back
+
+Include the quest using the QUEST_NEW format. Make it engaging with good rewards (50 gold, 75 XP).
+
+Remember to include [LORE: Village of Thornwick, Aldric Greymantle] since the player is learning about these.`;
+
+export default function Game() {
+  const [currentSession, setCurrentSession] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [loreJournalOpen, setLoreJournalOpen] = useState(false);
+  const [questPanelOpen, setQuestPanelOpen] = useState(false);
+  const [companionPanelOpen, setCompanionPanelOpen] = useState(false);
+  const [newlyDiscoveredLore, setNewlyDiscoveredLore] = useState([]);
+  const [questNotification, setQuestNotification] = useState(null);
+  const [companionNotification, setCompanionNotification] = useState(null);
+  const queryClient = useQueryClient();
+
+  // Fetch existing sessions
+  const { data: sessions = [], isLoading: loadingSessions } = useQuery({
+    queryKey: ['gameSessions'],
+    queryFn: () => base44.entities.GameSession.list('-updated_date', 1)
+  });
+
+  // Load latest session on mount
+  useEffect(() => {
+    if (sessions.length > 0 && !currentSession) {
+      const session = sessions[0];
+      setCurrentSession(session);
+      if (session.story_history && session.story_history.length > 0) {
+        setMessages(session.story_history);
+      }
+    }
+  }, [sessions]);
+
+  // Create session mutation
+  const createSessionMutation = useMutation({
+    mutationFn: (data) => base44.entities.GameSession.create(data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['gameSessions'] })
+  });
+
+  // Update session mutation
+  const updateSessionMutation = useMutation({
+    mutationFn: ({ id, data }) => base44.entities.GameSession.update(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['gameSessions'] })
+  });
+
+  // Parse lore discoveries from AI response
+  const parseLoreDiscoveries = (content, existingLore = []) => {
+    const loreMatch = content.match(/\[LORE:([^\]]+)\]/);
+    if (!loreMatch) return [];
+
+    const titles = loreMatch[1].split(',').map(s => s.trim()).filter(Boolean);
+    // Only return lore that exists in BASE_LORE and hasn't been discovered yet
+    return titles.filter(title => 
+      BASE_LORE.some(l => l.title === title) && !existingLore.includes(title)
+    );
+  };
+
+  // Parse quest updates from AI response
+  const parseQuestUpdates = (content, existingQuests = []) => {
+    const updates = {
+      newQuests: [],
+      progressUpdates: [],
+      stageUpdates: [],
+      completedQuests: [],
+      failedQuests: []
+    };
+
+    // Parse new quests
+    const newQuestMatches = content.matchAll(/\[QUEST_NEW:\s*(\{[\s\S]*?\})\]/g);
+    for (const match of newQuestMatches) {
+      try {
+        const quest = JSON.parse(match[1]);
+        if (!existingQuests.some(q => q.id === quest.id)) {
+          updates.newQuests.push(quest);
+        }
+      } catch (e) {
+        console.error('Failed to parse new quest:', e);
+      }
+    }
+
+    // Parse progress updates
+    const progressMatches = content.matchAll(/\[QUEST_PROGRESS:\s*(\{[\s\S]*?\})\]/g);
+    for (const match of progressMatches) {
+      try {
+        updates.progressUpdates.push(JSON.parse(match[1]));
+      } catch (e) {
+        console.error('Failed to parse quest progress:', e);
+      }
+    }
+
+    // Parse stage updates
+    const stageMatches = content.matchAll(/\[QUEST_STAGE:\s*(\{[\s\S]*?\})\]/g);
+    for (const match of stageMatches) {
+      try {
+        updates.stageUpdates.push(JSON.parse(match[1]));
+      } catch (e) {
+        console.error('Failed to parse quest stage:', e);
+      }
+    }
+
+    // Parse completed quests
+    const completeMatches = content.matchAll(/\[QUEST_COMPLETE:\s*(\{[\s\S]*?\})\]/g);
+    for (const match of completeMatches) {
+      try {
+        updates.completedQuests.push(JSON.parse(match[1]));
+      } catch (e) {
+        console.error('Failed to parse quest completion:', e);
+      }
+    }
+
+    // Parse failed quests
+    const failedMatches = content.matchAll(/\[QUEST_FAILED:\s*(\{[\s\S]*?\})\]/g);
+    for (const match of failedMatches) {
+      try {
+        updates.failedQuests.push(JSON.parse(match[1]));
+      } catch (e) {
+        console.error('Failed to parse quest failure:', e);
+      }
+    }
+
+    return updates;
+  };
+
+  // Apply quest updates to session
+  const applyQuestUpdates = (updates, existingQuests = []) => {
+    let quests = [...existingQuests];
+    let notification = null;
+
+    // Add new quests
+    for (const newQuest of updates.newQuests) {
+      quests.push(newQuest);
+      notification = { type: 'new', quest: newQuest };
+    }
+
+    // Apply progress updates
+    for (const progress of updates.progressUpdates) {
+      const questIdx = quests.findIndex(q => q.id === progress.quest_id);
+      if (questIdx !== -1) {
+        const quest = { ...quests[questIdx] };
+        const objIdx = quest.objectives?.findIndex(o => o.id === progress.objective_id);
+        if (objIdx !== -1) {
+          quest.objectives = [...quest.objectives];
+          quest.objectives[objIdx] = { ...quest.objectives[objIdx], completed: true };
+        }
+        if (progress.log_entry) {
+          quest.log = [...(quest.log || []), progress.log_entry];
+        }
+        quests[questIdx] = quest;
+        notification = { type: 'updated', quest };
+      }
+    }
+
+    // Apply stage updates
+    for (const stageUpdate of updates.stageUpdates) {
+      const questIdx = quests.findIndex(q => q.id === stageUpdate.quest_id);
+      if (questIdx !== -1) {
+        const quest = { ...quests[questIdx] };
+        quest.stage = stageUpdate.new_stage;
+        if (stageUpdate.log_entry) {
+          quest.log = [...(quest.log || []), stageUpdate.log_entry];
+        }
+        quests[questIdx] = quest;
+        notification = { type: 'stage_complete', quest };
+      }
+    }
+
+    // Apply completions
+    for (const complete of updates.completedQuests) {
+      const questIdx = quests.findIndex(q => q.id === complete.quest_id);
+      if (questIdx !== -1) {
+        const quest = { ...quests[questIdx] };
+        quest.status = 'completed';
+        // Mark all objectives as completed
+        quest.objectives = quest.objectives?.map(o => ({ ...o, completed: true })) || [];
+        if (complete.log_entry) {
+          quest.log = [...(quest.log || []), complete.log_entry];
+        }
+        quests[questIdx] = quest;
+        notification = { type: 'completed', quest };
+      }
+    }
+
+    // Apply failures
+    for (const failed of updates.failedQuests) {
+      const questIdx = quests.findIndex(q => q.id === failed.quest_id);
+      if (questIdx !== -1) {
+        const quest = { ...quests[questIdx] };
+        quest.status = 'failed';
+        if (failed.log_entry) {
+          quest.log = [...(quest.log || []), failed.log_entry];
+        }
+        quests[questIdx] = quest;
+        notification = { type: 'failed', quest };
+      }
+    }
+
+    return { quests, notification };
+  };
+
+  // Clean AI response of all tags
+  const cleanResponse = (content) => {
+    return content
+      .replace(/\[STATS:[^\]]+\]/g, '')
+      .replace(/\[LORE:[^\]]+\]/g, '')
+      .replace(/\[QUEST_NEW:\s*\{[\s\S]*?\}\]/g, '')
+      .replace(/\[QUEST_PROGRESS:\s*\{[\s\S]*?\}\]/g, '')
+      .replace(/\[QUEST_STAGE:\s*\{[\s\S]*?\}\]/g, '')
+      .replace(/\[QUEST_COMPLETE:\s*\{[\s\S]*?\}\]/g, '')
+      .replace(/\[QUEST_FAILED:\s*\{[\s\S]*?\}\]/g, '')
+      .replace(/\[COMPANION_JOIN:\s*\{[\s\S]*?\}\]/g, '')
+      .replace(/\[COMPANION_DIALOGUE:\s*\{[\s\S]*?\}\]/g, '')
+      .replace(/\[COMPANION_HEALTH:\s*\{[\s\S]*?\}\]/g, '')
+      .replace(/\[COMPANION_LEAVE:\s*\{[\s\S]*?\}\]/g, '')
+      .trim();
+  };
+
+  // Format active quests for AI prompt
+  const formatActiveQuests = (quests = []) => {
+    const active = quests.filter(q => q.status === 'active');
+    if (active.length === 0) return 'No active quests';
+    
+    return active.map(q => {
+      const currentObjectives = q.objectives?.filter(o => o.stage === q.stage) || [];
+      const pendingObjs = currentObjectives.filter(o => !o.completed);
+      return `- ${q.name} (Stage ${q.stage}/${q.total_stages}): ${pendingObjs.map(o => o.description).join(', ')}`;
+    }).join('\n');
+  };
+
+  // Format companion context for AI prompt
+  const formatCompanionContext = (companions = [], location = '') => {
+    const active = companions.filter(c => c.status === 'active');
+    const recruited = companions.map(c => c.id);
+    
+    // Get available companions for recruitment at current location
+    const availableForRecruitment = COMPANION_TEMPLATES.filter(c => 
+      !recruited.includes(c.id) && 
+      c.recruitment_location.toLowerCase().includes(location.toLowerCase().split(' ')[0])
+    );
+    
+    let context = '';
+    
+    if (active.length > 0) {
+      context += `ACTIVE COMPANIONS (include their dialogue and reactions):\n`;
+      context += active.map(c => 
+        `- ${c.name} (${c.class}): ${c.personality}. Health: ${c.health}/${c.max_health}. Abilities: ${c.abilities?.map(a => a.name).join(', ')}`
+      ).join('\n');
+    } else {
+      context += 'No active companions.';
+    }
+    
+    if (availableForRecruitment.length > 0) {
+      context += `\n\nPOTENTIAL COMPANIONS TO INTRODUCE (can be recruited through story):\n`;
+      context += availableForRecruitment.map(c => 
+        `- ${c.name} (${c.class}): ${c.recruitment_hint}. Personality: ${c.personality}`
+      ).join('\n');
+    }
+    
+    return context;
+  };
+
+  // Parse companion updates from AI response
+  const parseCompanionUpdates = (content, existingCompanions = []) => {
+    const updates = {
+      joins: [],
+      dialogues: [],
+      healthChanges: [],
+      leaves: []
+    };
+
+    // Parse joins
+    const joinMatches = content.matchAll(/\[COMPANION_JOIN:\s*(\{[\s\S]*?\})\]/g);
+    for (const match of joinMatches) {
+      try {
+        const data = JSON.parse(match[1]);
+        const template = COMPANION_TEMPLATES.find(c => c.id === data.id);
+        if (template && !existingCompanions.some(c => c.id === data.id)) {
+          updates.joins.push({
+            ...template,
+            health: template.max_health,
+            loyalty: 50,
+            status: 'active',
+            mood: 'Excited to join the adventure!'
+          });
+        }
+      } catch (e) {
+        console.error('Failed to parse companion join:', e);
+      }
+    }
+
+    // Parse dialogues
+    const dialogueMatches = content.matchAll(/\[COMPANION_DIALOGUE:\s*(\{[\s\S]*?\})\]/g);
+    for (const match of dialogueMatches) {
+      try {
+        updates.dialogues.push(JSON.parse(match[1]));
+      } catch (e) {
+        console.error('Failed to parse companion dialogue:', e);
+      }
+    }
+
+    // Parse health changes
+    const healthMatches = content.matchAll(/\[COMPANION_HEALTH:\s*(\{[\s\S]*?\})\]/g);
+    for (const match of healthMatches) {
+      try {
+        updates.healthChanges.push(JSON.parse(match[1]));
+      } catch (e) {
+        console.error('Failed to parse companion health:', e);
+      }
+    }
+
+    // Parse leaves
+    const leaveMatches = content.matchAll(/\[COMPANION_LEAVE:\s*(\{[\s\S]*?\})\]/g);
+    for (const match of leaveMatches) {
+      try {
+        updates.leaves.push(JSON.parse(match[1]));
+      } catch (e) {
+        console.error('Failed to parse companion leave:', e);
+      }
+    }
+
+    return updates;
+  };
+
+  // Apply companion updates
+  const applyCompanionUpdates = (updates, existingCompanions = []) => {
+    let companions = [...existingCompanions];
+    let notification = null;
+
+    // Add new companions
+    for (const newCompanion of updates.joins) {
+      companions.push(newCompanion);
+      notification = { type: 'recruited', companion: newCompanion };
+    }
+
+    // Apply dialogues (update mood)
+    for (const dialogue of updates.dialogues) {
+      const idx = companions.findIndex(c => c.id === dialogue.id);
+      if (idx !== -1) {
+        companions[idx] = { 
+          ...companions[idx], 
+          mood: dialogue.dialogue 
+        };
+      }
+    }
+
+    // Apply health changes
+    for (const health of updates.healthChanges) {
+      const idx = companions.findIndex(c => c.id === health.id);
+      if (idx !== -1) {
+        const newHealth = Math.max(0, Math.min(
+          companions[idx].max_health,
+          companions[idx].health + health.change
+        ));
+        companions[idx] = { ...companions[idx], health: newHealth };
+      }
+    }
+
+    // Remove leaving companions
+    for (const leave of updates.leaves) {
+      const leavingCompanion = companions.find(c => c.id === leave.id);
+      if (leavingCompanion) {
+        notification = { type: 'left', companion: leavingCompanion };
+        companions = companions.filter(c => c.id !== leave.id);
+      }
+    }
+
+    return { companions, notification };
+  };
+
+  // Handle companion status change
+  const handleSetCompanionActive = async (companionId, active) => {
+    if (!currentSession) return;
+    
+    const companions = [...(currentSession.companions || [])];
+    const idx = companions.findIndex(c => c.id === companionId);
+    if (idx !== -1) {
+      companions[idx] = { 
+        ...companions[idx], 
+        status: active ? 'active' : 'resting' 
+      };
+      
+      const updatedSession = { ...currentSession, companions };
+      setCurrentSession(updatedSession);
+      await updateSessionMutation.mutateAsync({
+        id: currentSession.id,
+        data: { companions }
+      });
+    }
+  };
+
+  // Handle companion dismissal
+  const handleDismissCompanion = async (companionId) => {
+    if (!currentSession) return;
+    
+    const companions = (currentSession.companions || []).filter(c => c.id !== companionId);
+    const updatedSession = { ...currentSession, companions };
+    setCurrentSession(updatedSession);
+    await updateSessionMutation.mutateAsync({
+      id: currentSession.id,
+      data: { companions }
+    });
+  };
+
+  // Parse stat changes from AI response
+  const parseStatChanges = (content) => {
+    const statsMatch = content.match(/\[STATS:([^\]]+)\]/);
+    if (!statsMatch) return null;
+
+    const changes = { gold: 0, health: 0, xp: 0, items: [] };
+    const parts = statsMatch[1].split(',').map(s => s.trim());
+
+    parts.forEach(part => {
+      if (part.startsWith('gold')) {
+        const val = parseInt(part.replace('gold', ''));
+        if (!isNaN(val)) changes.gold = val;
+      } else if (part.startsWith('health')) {
+        const val = parseInt(part.replace('health', ''));
+        if (!isNaN(val)) changes.health = val;
+      } else if (part.startsWith('xp')) {
+        const val = parseInt(part.replace('xp', ''));
+        if (!isNaN(val)) changes.xp = val;
+      } else if (part.startsWith('item+')) {
+        const itemStr = part.replace('item+', '');
+        const [name, type] = itemStr.split(':');
+        if (name) changes.items.push({ name, type: type || 'item', quantity: 1 });
+      }
+    });
+
+    return changes;
+  };
+
+  // Apply stat changes and update session
+  const applyStatChanges = (changes, cleanContent) => {
+    if (!currentSession || !changes) return currentSession;
+
+    const newGold = Math.max(0, (currentSession.gold || 0) + changes.gold);
+    const newHealth = Math.min(
+      currentSession.max_health || 100,
+      Math.max(0, (currentSession.health || 100) + changes.health)
+    );
+    const newXP = (currentSession.experience || 0) + changes.xp;
+    
+    // Check for level up
+    const xpForLevel = currentSession.level * 100;
+    let newLevel = currentSession.level || 1;
+    let remainingXP = newXP;
+    while (remainingXP >= newLevel * 100) {
+      remainingXP -= newLevel * 100;
+      newLevel++;
+    }
+
+    // Add items to inventory
+    const newInventory = [...(currentSession.inventory || [])];
+    changes.items.forEach(item => {
+      const existing = newInventory.find(i => i.name === item.name);
+      if (existing) {
+        existing.quantity = (existing.quantity || 1) + 1;
+      } else {
+        newInventory.push(item);
+      }
+    });
+
+    return {
+      ...currentSession,
+      gold: newGold,
+      health: newHealth,
+      experience: remainingXP,
+      level: newLevel,
+      max_health: newLevel > (currentSession.level || 1) ? (currentSession.max_health || 100) + 10 : (currentSession.max_health || 100),
+      inventory: newInventory
+    };
+  };
+
+  // Create new character
+  const handleCreateCharacter = async (name, characterClass) => {
+    setIsLoading(true);
+
+    const sessionData = {
+      character_name: name,
+      character_class: characterClass,
+      health: 100,
+      max_health: 100,
+      gold: 10,
+      experience: 0,
+      level: 1,
+      inventory: [{ name: 'Worn Dagger', type: 'weapon', quantity: 1 }],
+      current_location: 'Village of Thornwick',
+      story_history: [],
+      quests: [],
+      discovered_lore: [],
+      visited_locations: [],
+      met_characters: []
+    };
+
+    const newSession = await createSessionMutation.mutateAsync(sessionData);
+    setCurrentSession(newSession);
+
+    // Generate opening narrative
+    const prompt = OPENING_PROMPT
+      .replace('{characterName}', name)
+      .replace('{characterClass}', characterClass);
+
+    const undiscoveredLoreStr = BASE_LORE
+      .slice(0, 10)
+      .map(l => `- ${l.title} (${l.category}): ${l.short_description}`)
+      .join('\n');
+
+    const systemPrompt = GAME_MASTER_PROMPT
+      .replace('{characterName}', name)
+      .replace('{characterClass}', characterClass)
+      .replace('{location}', 'Village of Thornwick')
+      .replace('{health}', '100')
+      .replace('{maxHealth}', '100')
+      .replace('{gold}', '10')
+      .replace('{level}', '1')
+      .replace('{inventory}', 'Worn Dagger (weapon)')
+      .replace('{loreContext}', '')
+      .replace('{undiscoveredLore}', undiscoveredLoreStr)
+      .replace('{activeQuests}', 'No active quests')
+      .replace('{companionContext}', formatCompanionContext([], 'Village of Thornwick'));
+
+    const response = await base44.integrations.Core.InvokeLLM({
+      prompt: `${systemPrompt}\n\nPlayer request: ${prompt}`
+    });
+
+    // Parse lore discoveries
+    const discoveredLoreTitles = parseLoreDiscoveries(response, []);
+    
+    // Parse quest updates
+    const questUpdates = parseQuestUpdates(response, []);
+    const { quests: newQuests, notification } = applyQuestUpdates(questUpdates, []);
+    
+    // Parse companion updates
+    const companionUpdates = parseCompanionUpdates(response, []);
+    const { companions: newCompanions, notification: compNotification } = applyCompanionUpdates(companionUpdates, []);
+    
+    const cleanContent = cleanResponse(response);
+    const newMessages = [{ role: 'assistant', content: cleanContent }];
+    setMessages(newMessages);
+
+    // Update session with discovered lore, quests, and companions
+    const updatedSessionData = { 
+      story_history: newMessages,
+      discovered_lore: discoveredLoreTitles,
+      quests: newQuests,
+      companions: newCompanions
+    };
+    
+    await updateSessionMutation.mutateAsync({
+      id: newSession.id,
+      data: updatedSessionData
+    });
+
+    // Update local session state
+    setCurrentSession(prev => ({
+      ...prev,
+      ...updatedSessionData
+    }));
+
+    // Show notifications
+    if (discoveredLoreTitles.length > 0) {
+      setNewlyDiscoveredLore(discoveredLoreTitles);
+    }
+    if (notification) {
+      setQuestNotification(notification);
+    }
+    if (compNotification) {
+      setCompanionNotification(compNotification);
+    }
+
+    setIsLoading(false);
+  };
+
+  // Handle player action
+  const handleAction = async (action) => {
+    if (!currentSession) return;
+    setIsLoading(true);
+
+    const userMessage = { role: 'user', content: action };
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+
+    const inventoryStr = (currentSession.inventory || [])
+      .map(i => `${i.name} (${i.type})${i.quantity > 1 ? ` x${i.quantity}` : ''}`)
+      .join(', ') || 'Empty';
+
+    // Build lore context from discovered lore
+    const loreContext = getLoreContext(currentSession.discovered_lore || [], BASE_LORE);
+    
+    // Get undiscovered lore to potentially introduce
+    const undiscovered = getUndiscoveredLore(currentSession.discovered_lore || [], BASE_LORE);
+    const undiscoveredLoreStr = undiscovered
+      .slice(0, 8)
+      .map(l => `- ${l.title} (${l.category}): ${l.short_description}`)
+      .join('\n');
+
+    // Format active quests for AI context
+    const activeQuestsStr = formatActiveQuests(currentSession.quests);
+
+    const systemPrompt = GAME_MASTER_PROMPT
+      .replace('{characterName}', currentSession.character_name)
+      .replace('{characterClass}', currentSession.character_class)
+      .replace('{location}', currentSession.current_location)
+      .replace('{health}', String(currentSession.health))
+      .replace('{maxHealth}', String(currentSession.max_health))
+      .replace('{gold}', String(currentSession.gold))
+      .replace('{level}', String(currentSession.level))
+      .replace('{inventory}', inventoryStr)
+      .replace('{loreContext}', loreContext)
+      .replace('{undiscoveredLore}', undiscoveredLoreStr)
+      .replace('{activeQuests}', activeQuestsStr)
+      .replace('{companionContext}', formatCompanionContext(currentSession.companions || [], currentSession.current_location));
+
+    // Build conversation context (last 10 messages)
+    const contextMessages = newMessages.slice(-10)
+      .map(m => `${m.role === 'user' ? 'Player' : 'Game Master'}: ${m.content}`)
+      .join('\n\n');
+
+    const response = await base44.integrations.Core.InvokeLLM({
+      prompt: `${systemPrompt}\n\nRecent story:\n${contextMessages}\n\nPlayer's action: ${action}\n\nContinue the story. If the player's action relates to an active quest objective, update the quest progress. If the story naturally leads to a new quest opportunity, create one.`
+    });
+
+    // Parse lore discoveries
+    const newLoreDiscoveries = parseLoreDiscoveries(response, currentSession.discovered_lore || []);
+    
+    // Parse quest updates
+    const questUpdates = parseQuestUpdates(response, currentSession.quests || []);
+    const { quests: updatedQuests, notification } = applyQuestUpdates(questUpdates, currentSession.quests || []);
+    
+    // Parse companion updates
+    const companionUpdates = parseCompanionUpdates(response, currentSession.companions || []);
+    const { companions: updatedCompanions, notification: compNotification } = applyCompanionUpdates(companionUpdates, currentSession.companions || []);
+    
+    const changes = parseStatChanges(response);
+    const cleanContent = cleanResponse(response);
+    
+    const assistantMessage = { role: 'assistant', content: cleanContent };
+    const finalMessages = [...newMessages, assistantMessage];
+    setMessages(finalMessages);
+
+    // Update session with new stats, lore, and quests
+    const updatedSession = applyStatChanges(changes, cleanContent);
+    updatedSession.story_history = finalMessages;
+    updatedSession.discovered_lore = [
+      ...(currentSession.discovered_lore || []),
+      ...newLoreDiscoveries
+    ];
+    updatedSession.quests = updatedQuests;
+    updatedSession.companions = updatedCompanions;
+    
+    // Apply quest rewards if quest was completed
+    for (const complete of questUpdates.completedQuests) {
+      const completedQuest = updatedQuests.find(q => q.id === complete.quest_id);
+      if (completedQuest?.rewards) {
+        if (completedQuest.rewards.gold) {
+          updatedSession.gold = (updatedSession.gold || 0) + completedQuest.rewards.gold;
+        }
+        if (completedQuest.rewards.xp) {
+          updatedSession.experience = (updatedSession.experience || 0) + completedQuest.rewards.xp;
+        }
+        if (completedQuest.rewards.items) {
+          updatedSession.inventory = [...(updatedSession.inventory || []), ...completedQuest.rewards.items.map(i => ({ ...i, quantity: 1 }))];
+        }
+        updatedSession.completed_quest_count = (updatedSession.completed_quest_count || 0) + 1;
+      }
+    }
+    
+    setCurrentSession(updatedSession);
+
+    await updateSessionMutation.mutateAsync({
+      id: currentSession.id,
+      data: updatedSession
+    });
+
+    // Show notifications
+    if (newLoreDiscoveries.length > 0) {
+      setNewlyDiscoveredLore(newLoreDiscoveries);
+    }
+    if (notification) {
+      setQuestNotification(notification);
+    }
+    if (compNotification) {
+      setCompanionNotification(compNotification);
+    }
+
+    setIsLoading(false);
+  };
+
+  // Save game
+  const handleSave = async () => {
+    if (!currentSession) return;
+    await updateSessionMutation.mutateAsync({
+      id: currentSession.id,
+      data: { ...currentSession, story_history: messages }
+    });
+  };
+
+  // New game
+  const handleNewGame = async () => {
+    if (currentSession) {
+      await base44.entities.GameSession.delete(currentSession.id);
+    }
+    setCurrentSession(null);
+    setMessages([]);
+    queryClient.invalidateQueries({ queryKey: ['gameSessions'] });
+  };
+
+  if (loadingSessions) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-400">Loading your adventure...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show character creation if no session
+  if (!currentSession) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+        <CharacterCreation 
+          onCreateCharacter={handleCreateCharacter} 
+          isLoading={isLoading} 
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 flex flex-col">
+      <div className="max-w-6xl mx-auto w-full flex-1 flex flex-col p-4">
+        <GameHeader
+          onOpenInventory={() => setInventoryOpen(true)}
+          onOpenLoreJournal={() => setLoreJournalOpen(true)}
+          onOpenQuestPanel={() => setQuestPanelOpen(true)}
+          onSave={handleSave}
+          onNewGame={handleNewGame}
+          isSaving={updateSessionMutation.isPending}
+          discoveredLoreCount={currentSession.discovered_lore?.length || 0}
+          activeQuestCount={currentSession.quests?.filter(q => q.status === 'active').length || 0}
+          activeCompanionCount={currentSession.companions?.filter(c => c.status === 'active').length || 0}
+          onOpenCompanions={() => setCompanionPanelOpen(true)}
+        />
+
+        <div className="flex-1 flex gap-6 mt-4 min-h-0">
+          {/* Main Game Area */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex-1 flex flex-col bg-gradient-to-br from-slate-900/50 to-slate-800/30 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-5 min-h-0"
+          >
+            <StoryDisplay messages={messages} isLoading={isLoading} />
+            <div className="mt-4 pt-4 border-t border-slate-700/50">
+              <ActionInput 
+                onAction={handleAction} 
+                isLoading={isLoading}
+                disabled={currentSession.health <= 0}
+              />
+            </div>
+          </motion.div>
+
+          {/* Stats Sidebar - Hidden on mobile */}
+          <div className="hidden lg:block w-72 flex-shrink-0 space-y-4">
+            <CharacterStats session={currentSession} />
+            <ActiveCompanions 
+              companions={currentSession.companions || []}
+              onOpenPanel={() => setCompanionPanelOpen(true)}
+            />
+            <ActiveQuestTracker 
+              quests={currentSession.quests || []} 
+              onOpenQuestPanel={() => setQuestPanelOpen(true)}
+            />
+          </div>
+        </div>
+
+        {/* Mobile Stats */}
+        <div className="lg:hidden mt-4">
+          <CharacterStats session={currentSession} />
+        </div>
+      </div>
+
+      <InventoryPanel
+        inventory={currentSession.inventory}
+        isOpen={inventoryOpen}
+        onClose={() => setInventoryOpen(false)}
+      />
+
+      <LoreJournal
+        isOpen={loreJournalOpen}
+        onClose={() => setLoreJournalOpen(false)}
+        discoveredLore={currentSession.discovered_lore || []}
+        allLore={BASE_LORE}
+      />
+
+      <LoreNotification
+        entries={newlyDiscoveredLore}
+        onDismiss={() => setNewlyDiscoveredLore([])}
+        onViewJournal={() => {
+          setNewlyDiscoveredLore([]);
+          setLoreJournalOpen(true);
+        }}
+      />
+
+      <QuestPanel
+        isOpen={questPanelOpen}
+        onClose={() => setQuestPanelOpen(false)}
+        quests={currentSession.quests || []}
+      />
+
+      <QuestNotification
+        notification={questNotification}
+        onDismiss={() => setQuestNotification(null)}
+        onViewQuests={() => {
+          setQuestNotification(null);
+          setQuestPanelOpen(true);
+        }}
+      />
+
+      <CompanionPanel
+        isOpen={companionPanelOpen}
+        onClose={() => setCompanionPanelOpen(false)}
+        companions={currentSession.companions || []}
+        maxActive={currentSession.max_active_companions || 2}
+        onSetActive={handleSetCompanionActive}
+        onDismiss={handleDismissCompanion}
+      />
+
+      <CompanionNotification
+        notification={companionNotification}
+        onDismiss={() => setCompanionNotification(null)}
+        onViewCompanions={() => {
+          setCompanionNotification(null);
+          setCompanionPanelOpen(true);
+        }}
+      />
+    </div>
+  );
+}

@@ -1,0 +1,75 @@
+// Base world lore for the Realm of Shadows
+export const BASE_LORE = [
+  // === LOCATIONS ===
+  {
+    title: "Village of Thornwick",
+    category: "location",
+    short_description: "A humble frontier village at the edge of the Whispering Woods.",
+    content: `The Village of Thornwick sits precariously at the boundary between civilization and the unknown. Founded two centuries ago by refugees fleeing the Sundering War, it has grown into a modest but resilient community of farmers, craftsmen, and the occasional adventurer.
+
+The village is named for the thorny brambles that once covered the hillside, said to have been planted by the witch Moira Thornheart to protect the original settlers. The central square features an ancient well, believed to be blessed by the water spirits of the nearby Silverrun River.
+
+Notable locations include the Rusty Tankard tavern, Garrett's General Goods, and the small Temple of the Twin Moons. The village elder, Aldric Greymantle, has led Thornwick for thirty years with wisdom and caution.`,
+    related_entries: ["The Whispering Woods", "Aldric Greymantle", "The Sundering War", "Moira Thornheart"],
+    is_base_lore: true
+  },
+  {
+    title: "The Whispering Woods",
+    category: "location",
+    short_description: "An ancient, enchanted forest where the trees speak in riddles.",
+    content: `The Whispering Woods earned its name from the eerie sounds that drift between its ancient oaks and twisted willows. Locals claim the trees themselves speak, sharing secrets with those patient enough to listen—and driving mad those who hear too much.
+
+The forest is home to numerous creatures both mundane and magical. Deer and wolves share the underbrush with sprites, will-o'-wisps, and things far darker. At its heart lies the Grove of Echoes, a sacred place where the barrier between worlds grows thin.
+
+Many paths wind through the woods, but few are safe. The Old Road, marked by weathered stones carved with protective runes, remains the safest route—though even it offers no guarantees after nightfall. Travelers speak of the Shadow Elk, a spectral beast that guides the worthy and devours the wicked.`,
+    related_entries: ["The Grove of Echoes", "The Shadow Elk", "Village of Thornwick"],
+    is_base_lore: true
+  },
+  {
+    title: "The Grove of Echoes",
+    category: "location",
+    short_description: "A mystical clearing where past and present intertwine.",
+    content: `Deep within the Whispering Woods lies the Grove of Echoes, a circular clearing where seven ancient standing stones rise from moss-covered ground. The air here shimmers with residual magic, and visitors report hearing fragments of conversations from centuries past.
+
+The grove serves as a nexus of ley lines—channels of magical energy that crisscross the realm. During the full moon, the stones glow with an inner light, and the boundary between the mortal world and the Spirit Realm grows thin enough to cross.
+
+The druids of the Old Faith once gathered here to perform their most sacred rituals. Now, only the hermit Sylwen tends the grove, guarding its secrets from those who would misuse its power. She is said to know the true names of all who enter.`,
+    related_entries: ["The Whispering Woods", "Sylwen the Seer", "The Spirit Realm", "The Old Faith"],
+    is_base_lore: true
+  },
+  {
+    title: "Blackstone Keep",
+    category: "location",
+    short_description: "A ruined fortress haunted by the ghosts of a fallen kingdom.",
+    content: `Blackstone Keep stands atop the Crow's Perch cliffs, its shattered towers a testament to the devastating final battle of the Sundering War. Once the seat of the proud Valdris dynasty, the fortress fell when King Malachar Valdris made his desperate pact with the Shadow Court.
+
+The keep's black stones are not natural—they were transformed when dark magic consumed the fortress, fusing with the souls of the defenders. On moonless nights, spectral soldiers still walk the battlements, forever fighting a battle they cannot win.
+
+Treasure hunters occasionally brave the ruins, drawn by tales of the Valdris Crown and other artifacts of power. Few return, and those who do speak of corridors that shift, of whispers that promise power, and of the thing that waits in the throne room.`,
+    related_entries: ["The Sundering War", "King Malachar Valdris", "The Shadow Court", "The Valdris Crown"],
+    is_base_lore: true
+  },
+  {
+    title: "The Silverrun River",
+    category: "location",
+    short_description: "A sacred river said to carry the blessings of ancient water spirits.",
+    content: `The Silverrun River winds through the realm like a glittering serpent, its waters renowned for their purity and healing properties. The river's source lies high in the Frostpeak Mountains, fed by glacial melt and underground springs touched by elemental magic.
+
+Fishermen speak of the River Maidens—benevolent spirits who protect those who respect the waterways and drown those who pollute or overfish. Small shrines dot the riverbanks, where travelers leave offerings of flowers and silver coins.
+
+The river passes through several settlements, including Thornwick, before emptying into the Merchant's Bay near the coastal city of Saltmere. Its waters are said to reveal truth—liars who drink from certain pools find themselves unable to speak false words for a day and night.`,
+    related_entries: ["Village of Thornwick", "The River Maidens", "Saltmere"],
+    is_base_lore: true
+  },
+
+  // === CHARACTERS ===
+  {
+    title: "Aldric Greymantle",
+    category: "character",
+    short_description: "The wise and cautious elder of Thornwick village.",
+    content: `Aldric Greymantle has led the Village of Thornwick for thirty years, guiding it through drought, plague, and the occasional monster incursion. His grey-streaked beard and weathered face speak to decades of worry and wisdom.
+
+In his youth, Aldric was an adventurer of some renown, traveling with the Company of the Silver Dawn. He retired after the disastrous expedition to Blackstone Keep, where he lost his sword arm and all but two of his companions. The experience left him cautious—some say overly so.
+
+Despite his conservative nature, Aldric recognizes that sometimes heroes must rise. He keeps a chest of his old adventuring gear in his home, and those who earn his trust may find him a valuable source of knowledge about the realm's dangers and secrets.`,
+ 
